@@ -2,8 +2,8 @@
 """
 This module defines a Cache class for storing data
 in Redis, retrieving it while preserving the original type,
-counting how many times methods are called, and
-keeping a history of inputs and outputs.
+counting how many times methods are called,
+and keeping a history of inputs and outputs.
 """
 
 import redis
@@ -37,8 +37,8 @@ def count_calls(method: Callable) -> Callable:
 
 def call_history(method: Callable) -> Callable:
     """
-    Decorator that stores the history of inputs
-    and outputs for a particular function.
+    Decorator that stores the history of inputs and
+    outputs for a particular function.
 
     Parameters
     ----------
@@ -67,8 +67,8 @@ def call_history(method: Callable) -> Callable:
 
 class Cache:
     """
-    A Cache class that uses Redis to store and
-    retrieve data with original type preservation,
+    A Cache class that uses Redis to store and retrieve
+    data with original type preservation,
     count method calls, and store call history.
 
     Methods
@@ -79,8 +79,8 @@ class Cache:
         Stores the given data in Redis with a randomly generated key.
     get(key: str, fn: Optional[Callable]
     = None) -> Union[str, bytes, int, float, None]:
-        Retrieves data from Redis and applies
-        a conversion function if provided.
+        Retrieves data from Redis and applies a
+        conversion function if provided.
     get_str(key: str) -> str:
         Retrieves a string from Redis.
     get_int(key: str) -> int:
@@ -100,8 +100,8 @@ class Cache:
         Parameters
         ----------
         data : Union[str, bytes, int, float]
-            The data to store in Redis. It can be
-            a string, bytes, integer, or float.
+            The data to store in Redis. It can be a
+            string, bytes, integer, or float.
 
         Returns
         -------
@@ -127,8 +127,8 @@ class Cache:
         Returns
         -------
         Union[str, bytes, int, float, None]
-            The retrieved data after applying the
-            conversion function, or None if the key does not exist.
+            The retrieved data after applying the conversion
+            function, or None if the key does not exist.
         """
         data = self._redis.get(key)
         if data is None:
@@ -170,19 +170,36 @@ class Cache:
         return self.get(key, int)
 
 
+def replay(method: Callable):
+    """
+    Display the history of calls of a particular function.
+
+    Parameters
+    ----------
+    method : Callable
+        The method to replay the history for.
+    """
+    redis_client = redis.Redis()
+    input_key = f"{method.__qualname__}:inputs"
+    output_key = f"{method.__qualname__}:outputs"
+
+    inputs = redis_client.lrange(input_key, 0, -1)
+    outputs = redis_client.lrange(output_key, 0, -1)
+
+    print(f"{method.__qualname__} was called {len(inputs)} times:")
+
+    for input_val, output_val in zip(inputs, outputs):
+        input_val = input_val.decode("utf-8")
+        output_val = output_val.decode("utf-8")
+        print(f"{method.__qualname__}(*{input_val}) -> {output_val}")
+
+
 if __name__ == "__main__":
     cache = Cache()
 
-    # Test cases for call history
-    s1 = cache.store("first")
-    print(s1)
-    s2 = cache.store("second")
-    print(s2)
-    s3 = cache.store("third")
-    print(s3)
+    # Test cases for replay
+    cache.store("foo")
+    cache.store("bar")
+    cache.store(42)
 
-    inputs = cache._redis.lrange(f"{cache.store.__qualname__}:inputs", 0, -1)
-    outputs = cache._redis.lrange(f"{cache.store.__qualname__}:outputs", 0, -1)
-
-    print(f"inputs: {inputs}")
-    print(f"outputs: {outputs}")
+    replay(cache.store)
