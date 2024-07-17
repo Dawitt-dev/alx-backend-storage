@@ -1,16 +1,43 @@
 #!/usr/bin/env python3
 """
-This module defines a Cache class for storing data in Redis.
+This module defines a Cache class for storing
+data in Redis, retrieving it while preserving the original type,
+and counting how many times methods are called.
 """
 
 import redis
 import uuid
 from typing import Union, Callable, Optional
+from functools import wraps
+
+
+def count_calls(method: Callable) -> Callable:
+    """
+    Decorator that counts how many times a method is called.
+
+    Parameters
+    ----------
+    method : Callable
+        The method to be decorated.
+
+    Returns
+    -------
+    Callable
+        The decorated method.
+    """
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function that increments the call count in Redis."""
+        key = method.__qualname__
+        self._redis.incr(key)
+        return method(self, *args, **kwargs)
+    return wrapper
 
 
 class Cache:
     """
-    A Cache class that uses Redis to store data.
+    A Cache class that uses Redis to store and
+    retrieve data with original type preservation.
 
     Methods
     -------
@@ -18,12 +45,21 @@ class Cache:
         Initializes the Redis client and flushes the database.
     store(data: Union[str, bytes, int, float]) -> str:
         Stores the given data in Redis with a randomly generated key.
+    get(key: str, fn: Optional[Callable]
+    = None) -> Union[str, bytes, int, float, None]:
+        Retrieves data from Redis and
+        applies a conversion function if provided.
+    get_str(key: str) -> str:
+        Retrieves a string from Redis.
+    get_int(key: str) -> int:
+        Retrieves an integer from Redis.
     """
     def __init__(self):
         """Initialize the Redis client and flush the database."""
         self._redis = redis.Redis()
         self._redis.flushdb()
 
+    @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """
         Store data in Redis with a random key and return the key.
@@ -31,8 +67,8 @@ class Cache:
         Parameters
         ----------
         data : Union[str, bytes, int, float]
-            The data to store in Redis. It can be a string, bytes, integer,
-            or float.
+            The data to store in Redis. It can be a
+            string, bytes, integer, or float.
 
         Returns
         -------
@@ -58,8 +94,8 @@ class Cache:
         Returns
         -------
         Union[str, bytes, int, float, None]
-            The retrieved data after applying the conversion function,
-            or None if the key does not exist.
+            The retrieved data after applying the
+            conversion function, or None if the key does not exist.
         """
         data = self._redis.get(key)
         if data is None:
@@ -104,16 +140,10 @@ class Cache:
 if __name__ == "__main__":
     cache = Cache()
 
-    # Test cases
-    TEST_CASES = {
-        b"foo": None,
-        123: int,
-        "bar": lambda d: d.decode("utf-8")
-    }
+    # Test cases for counting calls
+    cache.store(b"first")
+    print(cache.get(cache.store.__qualname__))  # Output should be 1
 
-    for value, fn in TEST_CASES.items():
-        key = cache.store(value)
-        assert cache.get(key, fn=fn) == value
-        print(f"Test passed for value: {value}")
-
-    print("All tests passed.")
+    cache.store(b"second")
+    cache.store(b"third")
+    print(cache.get(cache.store.__qualname__))  # Output should be 3
