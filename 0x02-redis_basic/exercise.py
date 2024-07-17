@@ -5,7 +5,7 @@ This module defines a Cache class for storing data in Redis.
 
 import redis
 import uuid
-from typing import Union
+from typing import Union, Callable, Optional
 
 
 class Cache:
@@ -43,15 +43,77 @@ class Cache:
         self._redis.set(key, data)
         return key
 
+    def get(self, key: str, fn: Optional[Callable]
+            = None) -> Union[str, bytes, int, float, None]:
+        """
+        Retrieve data from Redis and apply a conversion function if provided.
+
+        Parameters
+        ----------
+        key : str
+            The key for the data in Redis.
+        fn : Optional[Callable], default None
+            The function to convert the data back to the desired format.
+
+        Returns
+        -------
+        Union[str, bytes, int, float, None]
+            The retrieved data after applying the conversion function,
+            or None if the key does not exist.
+        """
+        data = self._redis.get(key)
+        if data is None:
+            return None
+        if fn:
+            return fn(data)
+        return data
+
+    def get_str(self, key: str) -> str:
+        """
+        Retrieve a string from Redis.
+
+        Parameters
+        ----------
+        key : str
+            The key for the data in Redis.
+
+        Returns
+        -------
+        str
+            The retrieved string data.
+        """
+        return self.get(key, lambda d: d.decode("utf-8"))
+
+    def get_int(self, key: str) -> int:
+        """
+        Retrieve an integer from Redis.
+
+        Parameters
+        ----------
+        key : str
+            The key for the data in Redis.
+
+        Returns
+        -------
+        int
+            The retrieved integer data.
+        """
+        return self.get(key, int)
+
 
 if __name__ == "__main__":
     cache = Cache()
 
-    data = b"hello"
-    key = cache.store(data)
-    print(f"Stored key: {key}")
+    # Test cases
+    TEST_CASES = {
+        b"foo": None,
+        123: int,
+        "bar": lambda d: d.decode("utf-8")
+    }
 
-    # Verifying the stored data
-    local_redis = redis.Redis()
-    stored_data = local_redis.get(key)
-    print(f"Stored data: {stored_data}")
+    for value, fn in TEST_CASES.items():
+        key = cache.store(value)
+        assert cache.get(key, fn=fn) == value
+        print(f"Test passed for value: {value}")
+
+    print("All tests passed.")
